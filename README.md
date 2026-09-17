@@ -252,20 +252,23 @@ $$
 Their difference is
 
 $$
-\log p_\theta(x_{t-1}\mid x_t)
+\log p_\theta(x_{t-1}\mid x_t) $$
 -
+$$
 \log p_{\theta_{\mathrm{old}}}(x_{t-1}\mid x_t).
 $$
 
 The PPO probability ratio is then
 
 $$
-r_t(\theta)
+r_t(\theta) $$
 =
+$$
 \exp
 \left(
-\log p_\theta(x_{t-1}\mid x_t)
+\log p_\theta(x_{t-1}\mid x_t) $$
 -
+$$
 \log p_{\theta_{\mathrm{old}}}(x_{t-1}\mid x_t)
 \right).
 $$
