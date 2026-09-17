@@ -93,7 +93,7 @@ For this small experiment, the model was sufficiently trained to produce recogni
 
 ## 1.4 Baseline Generation
 
-![Baseline DDPM Samples](assets/ddpm_baseline_samples_1.png)
+![Baseline DDPM Samples](assets/ddpm_baseline_samples.png)
 
 The baseline DDPM was able to generate recognizable digits from Gaussian noise.
 
