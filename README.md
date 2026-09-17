@@ -160,8 +160,8 @@ $$
 
 Each reverse transition follows
 
-$$[\
-p_\theta(x_{t-1}\mid x_t)\] $$
+$$[
+p_\theta(x_{t-1}\mid x_t)] $$
 =
 
 $$\mathcal{N}
