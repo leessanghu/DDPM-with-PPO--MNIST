@@ -1,136 +1,153 @@
 # DDPM with PPO on MNIST
 
-> From a simple DDPM implementation to exploring how reinforcement learning changes the denoising trajectory.
+> From implementing a DDPM from scratch to exploring how reinforcement learning reshapes its denoising trajectory.
 
-This project started as a small practice project to understand **DDPM (Denoising Diffusion Probabilistic Models)** by implementing one from scratch on MNIST.
+## Overview
 
-After training the baseline model, I became interested in a different question:
+This project began as a simple implementation exercise to understand **Denoising Diffusion Probabilistic Models (DDPMs)** on MNIST.
+
+After building and training the baseline DDPM, I became interested in a new question:
 
 > **What happens if reinforcement learning is applied to the reverse diffusion process?**
 
-Since diffusion generation can be viewed as a sequence of stochastic transitions
+Since diffusion generation consists of a sequence of stochastic transitions,
 
-$$\[
+$$
 x_T \rightarrow x_{T-1} \rightarrow \cdots \rightarrow x_0,
-\] $$
+$$
 
-I experimented with treating this denoising process as a policy trajectory and fine-tuning it using **Proximal Policy Optimization (PPO)**.
+I treated the reverse diffusion process as a stochastic policy and fine-tuned it using **Proximal Policy Optimization (PPO)**.
 
-The goal eventually became broader than simply checking whether PPO increased a reward.
+The goal eventually became broader than simply asking whether PPO improves a scalar reward.
 
 I wanted to examine the result from several perspectives:
 
-- Does PPO actually change the reward?
-- Does it change the distribution of generated samples?
-- If the final image changes, **when and how does the denoising trajectory begin to diverge?**
-- Can that divergence be observed both visually and quantitatively?
+- Does PPO improve the chosen reward?
+- Does PPO change the distribution of generated samples?
+- If the final image changes, when does the denoising trajectory begin to diverge?
+- How does that divergence develop over time?
+- Can the difference be observed both visually and quantitatively?
 
 ---
 
-# 1. Starting Point — DDPM from Scratch
+# 1. DDPM from Scratch
 
-The first stage was simply to implement and understand a DDPM.
+The project first implements a small DDPM on MNIST without relying on a diffusion library.
 
-For the forward diffusion process,
+The forward diffusion process is
 
-$$ \[
+$$
 x_t =
 \sqrt{\bar{\alpha}_t}x_0
 +
 \sqrt{1-\bar{\alpha}_t}\epsilon,
 \qquad
 \epsilon \sim \mathcal{N}(0,I).
-\] $$
+$$
 
-A small U-Net was trained to predict the added noise,
+A small U-Net predicts the injected noise,
 
-$$\[
+$$
 \epsilon_\theta(x_t,t),
-\]$$
+$$
 
-using the standard noise-prediction objective
+using the standard DDPM noise-prediction objective:
 
-$$\[
-\mathcal{L}_{DDPM}
+$$
+\mathcal{L}_{\mathrm{DDPM}}
 =
 \mathbb{E}
 \left[
-\|\epsilon-\epsilon_\theta(x_t,t)\|^2
+\left\|
+\epsilon-\epsilon_\theta(x_t,t)
+\right\|^2
 \right].
-\]$$
+$$
 
 The implementation includes:
 
-- linear noise schedule
+- a linear noise schedule
 - forward diffusion
-- sinusoidal timestep embedding
+- sinusoidal timestep embeddings
 - residual blocks
-- U-Net noise predictor
+- a small U-Net
 - DDPM reverse sampling
 
-The model was intentionally kept small and trained for only **10 epochs**, since the initial purpose was to understand the mechanism rather than maximize MNIST generation performance.
+The model was intentionally kept small and trained for only **10 epochs**.  
+The initial purpose was to understand the mechanism rather than maximize MNIST generation performance.
 
 ---
 
-## DDPM Training
+## 1.1 DDPM Training
 
 ![DDPM Training Loss](assets/ddpm_training_loss.png)
 
-The noise-prediction MSE decreased rapidly during the first few epochs and then gradually stabilized.
+The noise-prediction MSE decreased rapidly during the first few epochs and then gradually stabilized around the low `0.02` range.
 
-The final loss remained around the low `0.02` range.
-
-This was sufficient for the model to generate recognizable MNIST-like structures, although some samples were still ambiguous or distorted.
+Although the model was intentionally undertrained, this was sufficient to produce recognizable MNIST-like samples.
 
 ---
 
-## Baseline Generation
+## 1.2 Baseline Generation
 
-![Baseline DDPM Samples](assets/ddpm_baseline_samples.png)
+![Baseline DDPM Samples](assets/ddpm_baseline_samples_1.png)
 
-After training, the DDPM was able to generate recognizable digits from Gaussian noise.
+The baseline DDPM successfully generates recognizable digits from Gaussian noise.
 
-The samples were not perfectly clean, which was expected given the small network and short training schedule.
+Some samples remain ambiguous or distorted, which is expected given the small architecture and short training schedule.
 
-At this point, the project was still simply a **DDPM implementation exercise**.
+A second set of generated baseline samples is shown below.
+
+![Additional Baseline DDPM Samples](assets/ddpm_baseline_samples_2.png)
+
+At this stage, the project was still simply a **DDPM implementation exercise**.
 
 ---
 
-## Watching the Denoising Process
+## 1.3 Watching the Reverse Diffusion Process
 
-One reason diffusion models are interesting is that generation can be inspected as a trajectory rather than only as a final output.
+One of the interesting properties of diffusion models is that generation can be inspected as a trajectory rather than only through the final output.
 
 ![DDPM Denoising Process](assets/ddpm_denoising_process.png)
 
-For example,
+A single sample evolves approximately as
 
 ```text
-t = 999
-   ↓
-t = 750
-   ↓
-t = 500
-   ↓
-t = 250
-   ↓
-t = 100
-   ↓
-t = 0
+Gaussian Noise
+     │
+     ▼
+  t = 999
+     │
+     ▼
+  t = 750
+     │
+     ▼
+  t = 500
+     │
+     ▼
+  t = 250
+     │
+     ▼
+  t = 100
+     │
+     ▼
+  t = 0
+     │
+     ▼
+Generated Digit
 ```
 
-shows noise gradually developing into a digit structure.
+Watching this sequential transformation led to the next question:
 
-This observation led to the next question:
-
-> If generation is a sequential trajectory, could reinforcement learning be applied to that trajectory?
+> **If generation itself is a sequential stochastic process, can it be treated as a reinforcement-learning trajectory?**
 
 ---
 
 # 2. Adding Reinforcement Learning
 
-The DDPM reverse process is
+The DDPM reverse process can be written as
 
-$$\[
+$$
 x_T
 \rightarrow
 x_{T-1}
@@ -138,35 +155,35 @@ x_{T-1}
 \cdots
 \rightarrow
 x_0.
-\]$$
+$$
 
-Each reverse transition can be written as
+Each reverse transition follows
 
-$$\[
-p_\theta(x_{t-1}|x_t)
+$$
+p_\theta(x_{t-1}\mid x_t)
 =
 \mathcal{N}
 \left(
 \mu_\theta(x_t,t),
-\sigma_t^2I
+\sigma_t^2 I
 \right).
-\]$$
+$$
 
-This suggests the following interpretation:
+This suggests a simple RL interpretation:
 
 ```text
 State
  x_t
   │
   ▼
-DDPM / Policy
+DDPM Policy
   │
   ▼
-$$pθ(x_{t-1} | x_t)$$
+pθ(x_{t-1} | x_t)
   │
   ▼
 Next State
-$$x_{t-1}$$
+x_{t-1}
   │
   ▼
  ...
@@ -179,137 +196,190 @@ Final Image
 Reward
 ```
 
-Instead of viewing the DDPM only as a noise predictor, I treated the reverse diffusion model as a **stochastic policy**.
+Instead of viewing the DDPM only as a noise predictor, I treated its reverse transition distribution as a **stochastic policy**.
 
-PPO was then used to fine-tune this policy.
+PPO was then used to fine-tune this pretrained policy.
 
 ---
 
 # 3. Reward Model
 
-A separate CNN classifier was trained on MNIST and reached approximately
+A separate CNN classifier was trained on MNIST.
+
+Its test accuracy reached approximately:
 
 ```text
-Test Accuracy = 98.96%
+98.96%
 ```
 
-For a generated image $$\(x_0\)$$, I defined the reward as
+For a generated image $x_0$, the reward was defined as
 
-$$\[
+$$
 R(x_0)
 =
-\max_k P(y=k|x_0).
-\]$$
+\max_k P(y=k\mid x_0).
+$$
 
-In other words, the diffusion model receives a high reward when the classifier is confident that the generated image belongs to one of the MNIST classes.
+In other words, a generated image receives a high reward when the classifier is confident that it belongs to one of the MNIST classes.
 
 This reward was deliberately simple.
 
-The experiment was not designed to build an optimal reward model, but to see **what happens to the diffusion process when a terminal reward is introduced through PPO**.
+The purpose was not to design an optimal perceptual reward model, but to observe how introducing a terminal reward through PPO affects the diffusion process.
 
 ---
 
-# 4. PPO Setup
+# 4. PPO Formulation
 
-For each reverse transition, the Gaussian transition probability was used as the policy probability.
+For each reverse transition, the Gaussian transition probability is interpreted as the policy probability.
 
-The PPO ratio is
+The PPO probability ratio is
 
-$$\[
+$$
 r_t(\theta)
 =
 \exp
 \left[
-\log p_\theta(x_{t-1}|x_t)
+\log p_\theta(x_{t-1}\mid x_t)
 -
-\log p_{\theta_{\text{old}}}(x_{t-1}|x_t)
+\log p_{\theta_{\mathrm{old}}}(x_{t-1}\mid x_t)
 \right].
-\]$$
+$$
 
-The clipped objective is
+The clipped PPO objective is
 
-$$\[
-\mathcal{L}_{PPO}
+$$
+\mathcal{L}_{\mathrm{PPO}}
 =
 \mathbb{E}
 \left[
 \min
 \left(
-r_tA_t,
-\operatorname{clip}(r_t,1-\epsilon,1+\epsilon)A_t
+r_t(\theta)A_t,
+\operatorname{clip}
+\left(
+r_t(\theta),
+1-\epsilon,
+1+\epsilon
+\right)A_t
 \right)
 \right].
-\]$$
+$$
 
-A small value network was also trained to estimate
+A separate value network estimates the expected terminal reward from an intermediate diffusion state:
 
-$$\[
+$$
 V_\phi(x_t,t)
 \approx
-\mathbb{E}[R(x_0)|x_t],
-\]$$
-with a simplified advantage
+\mathbb{E}
+\left[
+R(x_0)\mid x_t
+\right].
+$$
 
-$$\[
-A_t = R(x_0)-V_\phi(x_t,t).
-\]$$
+For this experiment, a simplified advantage was used:
 
-The PPO experiment used the pretrained DDPM as the starting policy rather than training a diffusion model from scratch with RL.
+$$
+A_t
+=
+R(x_0)-V_\phi(x_t,t).
+$$
+
+The PPO policy was initialized from the pretrained baseline DDPM rather than trained from scratch.
 
 ---
 
-# 5. PPO Training
+# 5. PPO Experiment Setup
+
+The PPO experiment can be summarized as:
+
+```text
+Pretrained DDPM
+      │
+      ▼
+Sample reverse trajectory
+      │
+      ▼
+x_T → x_{T-1} → ... → x_0
+      │
+      ▼
+CNN Reward Model
+      │
+      ▼
+R(x_0)
+      │
+      ├───────────────┐
+      ▼               ▼
+  Advantage       Value Loss
+      │
+      ▼
+PPO Policy Update
+      │
+      ▼
+Updated DDPM
+```
+
+During trajectory collection, reverse-process transitions were stored together with their old policy log-probabilities.
+
+The PPO update then recomputed the transition probability under the updated diffusion model and applied the clipped objective.
+
+---
+
+# 6. PPO Training Result
 
 ![PPO Training](assets/ppo_training.png)
 
-The blue curve represents the reward from newly sampled training trajectories.
+The blue curve represents the reward obtained from newly sampled training trajectories.
 
-It fluctuates considerably because each PPO iteration samples new stochastic reverse trajectories from a relatively small batch.
+Because every PPO iteration samples new stochastic diffusion trajectories from a relatively small batch, the training reward fluctuates considerably.
 
-The orange curve evaluates the current model using fixed initial noise.
+The orange curve represents evaluation using fixed initial noise and is substantially more stable.
 
-This evaluation is considerably more stable and frequently lies above the baseline reward.
+The fixed evaluation reward frequently exceeds the baseline reward, indicating that PPO did modify the policy in a reward-improving direction for some iterations.
 
-However, the reward does **not** continuously increase with PPO iterations.
+However, the reward does **not** continuously increase.
 
-Therefore, I do not interpret this experiment as simply:
+Therefore, the result should not be interpreted simply as:
 
-> "PPO continuously improves DDPM generation."
+> PPO continuously improves DDPM generation quality.
 
-Instead, PPO clearly changed the policy, and some improvement was observed under the chosen classifier-confidence reward.
+Instead, PPO changes the diffusion policy under the chosen classifier-confidence objective.
 
-The next question was whether this improvement represented the **whole story**.
+The next question was whether reward improvement captured the full behavioral change.
 
 ---
 
-# 6. Evaluating 1,000 Generated Samples
+# 7. Evaluation on 1,000 Generated Samples
 
-To look beyond the small fixed evaluation set, I generated **1,000 samples** from the baseline and PPO models.
+To obtain a broader comparison, I generated **1,000 samples** from both the baseline and PPO models.
 
-The average rewards were:
+The classifier-confidence rewards were:
 
 | Model | Mean Reward | Std. Reward |
 |---|---:|---:|
 | Baseline DDPM | 0.9154 | 0.1475 |
 | PPO-DDPM | **0.9203** | **0.1461** |
 
-The mean reward increased by approximately
+The average reward increased by approximately
 
-\[
-+0.0049.
-\]
+$$
+\Delta R
+=
+0.9203-0.9154
+\approx
+0.0049.
+$$
 
-So the optimized reward improved, but only modestly.
+The optimized reward therefore improved, but only modestly.
 
-Then I examined the predicted classes of the generated images.
+However, examining the generated class distribution revealed a much larger behavioral change.
 
 ---
 
-# 7. PPO Changed the Generated Distribution
+# 8. Generated Class Distribution
 
 ![Generated Class Distribution](assets/class_distribution.png)
 
-The class counts were:
+The predicted class counts for 1,000 generated samples were:
 
 | Digit | Baseline | PPO |
 |---:|---:|---:|
@@ -324,296 +394,315 @@ The class counts were:
 | 8 | 76 | 61 |
 | 9 | 78 | 96 |
 
-The most striking change occurred for digit `1`:
+The most striking change occurs for digit `1`:
 
-\[
-73 \rightarrow 211.
-\]
+$$
+73
+\rightarrow
+211.
+$$
 
-Its proportion increased from
+Its proportion increases from
 
-\[
-7.3\% \rightarrow 21.1\%.
-\]
+$$
+7.3\%
+\rightarrow
+21.1\%.
+$$
 
-This was much larger than the change in average reward.
+This is a much larger change than the improvement in mean reward.
 
-So the result was not simply:
-
-```text
-PPO
- ↓
-slightly better images
-```
-
-Instead, what I observed was closer to:
+The observed behavior is therefore closer to:
 
 ```text
-PPO
- ├── Mean classifier reward ↑ slightly
- │
- └── Generated class distribution changes substantially
+                    PPO
+                     │
+          ┌──────────┴──────────┐
+          ▼                     ▼
+Mean classifier          Generated class
+reward ↑ slightly        distribution shifts
 ```
 
-The reward contains no explicit objective for maintaining class balance or generation diversity.
+The reward contains no explicit constraint for maintaining class balance or generation diversity.
 
-Therefore, maximizing classifier confidence can alter the generative distribution.
+Therefore, optimizing classifier confidence can change the generative distribution.
 
-One possible explanation is that PPO found particular structures that provide an easier path toward high classifier confidence.
+One possible hypothesis is that PPO discovered particular image structures that provide an easier route toward high classifier confidence.
 
 However, this experiment does **not** establish why digit `1` specifically became more frequent.
 
 ---
 
-# 8. Looking Beyond the Final Image
+# 9. Looking Beyond the Final Image
 
-At this point, I became more interested in the diffusion process itself.
+The distribution shift raised a more interesting question.
 
-If PPO can change the final generated class, then:
+> **What exactly did PPO change inside the denoising process?**
 
-> **How does that difference develop through the denoising trajectory?**
+A diffusion model does not generate an image in one step.
 
-A naive comparison would be to give both models the same initial noise \(x_T\).
+Its output is the result of a long trajectory:
 
-But DDPM sampling is stochastic:
+$$
+x_T
+\rightarrow
+x_{T-1}
+\rightarrow
+\cdots
+\rightarrow
+x_0.
+$$
 
-\[
+If PPO changes the final generated class, then it is useful to ask:
+
+> **When and how do the baseline and PPO trajectories begin to diverge?**
+
+---
+
+# 10. Why Fixing Only the Initial Noise Is Not Enough
+
+A DDPM reverse step is stochastic:
+
+$$
 x_{t-1}
 =
 \mu_\theta(x_t,t)
 +
-\sigma_tz_t,
+\sigma_t z_t,
 \qquad
 z_t\sim\mathcal{N}(0,I).
-\]
+$$
 
-Therefore,
+Suppose the baseline and PPO models start from the same initial noise:
 
-\[
-x_T^{Base}=x_T^{PPO}
-\]
+$$
+x_T^{\mathrm{Base}}
+=
+x_T^{\mathrm{PPO}}.
+$$
 
-alone does **not** guarantee a controlled comparison.
+If they independently sample different reverse noise,
 
-Different \(z_t\) values could create different trajectories even without PPO.
+$$
+z_t^{\mathrm{Base}}
+\neq
+z_t^{\mathrm{PPO}},
+$$
+
+their trajectories can diverge simply because of sampling randomness.
+
+That would make it difficult to isolate the effect of PPO.
 
 ---
 
-# 9. Controlled Trajectory Experiment
+# 11. Controlled Trajectory Experiment
 
-To isolate the model difference as much as possible, I fixed both:
+To make the comparison more controlled, I fixed both:
 
-### 1. Initial noise
+1. the initial Gaussian noise $x_T$
+2. the reverse-process noise $z_t$ at every timestep
 
-\[
-x_T^{Base}=x_T^{PPO}
-\]
+Therefore,
 
-### 2. Reverse-process noise at every timestep
+$$
+x_T^{\mathrm{Base}}
+=
+x_T^{\mathrm{PPO}}
+$$
 
-\[
-z_t^{Base}=z_t^{PPO}
+and
+
+$$
+z_t^{\mathrm{Base}}
+=
+z_t^{\mathrm{PPO}}
 \qquad
 \forall t.
-\]
+$$
 
-The comparison therefore becomes:
+Conceptually:
 
 ```text
-                 SAME x_T
-                    │
-         ┌──────────┴──────────┐
-         │                     │
-     Baseline                PPO
-         │                     │
-         └──── SAME z_999 ─────┘
-         │                     │
-         ▼                     ▼
-     x_998^B                x_998^P
-         │                     │
-         └──── SAME z_998 ─────┘
-         │                     │
-         ▼                     ▼
-        ...                   ...
-         │                     │
-         ▼                     ▼
-       x_0^B                 x_0^P
+                  SAME x_T
+                     │
+          ┌──────────┴──────────┐
+          │                     │
+      Baseline                PPO
+          │                     │
+          └──── SAME z_t ───────┘
+          │                     │
+          ▼                     ▼
+       x_{t-1}^B             x_{t-1}^P
+          │                     │
+          └──── SAME z_{t-1} ───┘
+          │                     │
+          ▼                     ▼
+         ...                   ...
+          │                     │
+          ▼                     ▼
+        x_0^B                 x_0^P
 ```
 
-The repository includes the fixed random variables used for this experiment:
+The repository contains the fixed random variables used for this comparison:
 
 ```text
 initial_noise.pt
 trajectory_reverse_noises.pt
 ```
 
-Under this setup, stochastic sampling noise is matched between the two runs.
-
-This allowed me to focus on differences introduced by the changed model and their subsequent propagation through the trajectory.
+Under these matched stochastic conditions, differences between the trajectories arise from the changed denoising model and the subsequent propagation of those state differences.
 
 ---
 
-# 10. Same Noise, Different Generation
+# 12. Same Noise, Different Final Generation
 
-The controlled experiment revealed a particularly interesting sample.
+One controlled sample produced a particularly interesting result.
 
 ![Full Denoising Trajectory](assets/full_trajectory.png)
 
-Both trajectories begin under the same stochastic conditions.
+Both models begin from the same initial noise and receive the same reverse-process noise at every timestep.
 
-Yet:
+Yet the final outputs are:
 
 ```text
-Baseline DDPM → 5
-PPO-DDPM      → 9
+Baseline DDPM  →  5
+PPO-DDPM       →  9
 ```
 
-At high-noise timesteps, the difference is extremely difficult to interpret visually.
+At high-noise timesteps, the trajectories are visually difficult to distinguish.
 
-As denoising proceeds, however, the trajectories gradually develop different structures.
+As denoising progresses, however, different structures gradually emerge.
 
-The baseline trajectory eventually forms a `5`, while the PPO trajectory develops into a `9`.
-
-This became the sample used for the detailed trajectory analysis.
+This sample was selected for more detailed trajectory analysis.
 
 ---
 
-# 11. Detailed Denoising Trajectory
-
-I first inspected the later denoising process more closely.
+# 13. Detailed Denoising Trajectory
 
 ![Detailed Denoising Trajectory](assets/detailed_trajectory.png)
 
-The trajectory was saved every 25 timesteps from approximately
+The later part of the trajectory was saved at finer intervals:
 
-\[
-t=400 \rightarrow 0.
-\]
+$$
+t=400,375,350,\ldots,25,0.
+$$
 
-At roughly \(t=250\sim200\), the states are still noisy, but structural differences become increasingly visible.
+At approximately $t=250$ to $t=200$, the states remain noisy, but structural differences become increasingly visible.
 
-By around \(t=150\sim100\), the baseline and PPO trajectories visually resemble different digit structures much more clearly.
+By approximately $t=150$ to $t=100$, the baseline and PPO trajectories visually resemble different digit structures much more clearly.
 
-However, this observation alone does **not** identify an exact semantic transition timestep.
+However, visual inspection alone cannot identify an exact semantic divergence point.
 
-So I zoomed in further.
+So the interval was inspected more closely.
 
 ---
 
-# 12. Zooming Into \(t=400\rightarrow250\)
+# 14. Zooming Into the Noisy Region
 
 ![Trajectory Zoom](assets/trajectory_zoom.png)
 
 The interval
 
-\[
+$$
 t=400 \rightarrow 250
-\]
+$$
 
-was inspected at steps of 10.
+was examined at increments of 10 timesteps.
 
-But directly comparing the raw \(x_t\) images was difficult.
+Directly comparing the raw $x_t$ states remained difficult because both trajectories still contain substantial noise.
 
-The diffusion states still contain substantial noise, which can hide relatively small model-dependent differences.
+This motivated a different question:
 
-So instead of asking
-
-> "Can I visually recognize different digits yet?"
-
-I changed the analysis to
-
-> **"Where are the two trajectories actually different?"**
+> Instead of asking what each noisy state looks like, **where are the two states different?**
 
 ---
 
-# 13. Difference Maps
+# 15. Difference Maps
 
-For every selected timestep, I calculated
+For each selected timestep, I calculated the absolute pixel-space difference
 
-\[
+$$
 \Delta_t
 =
 \left|
-x_t^{PPO}
+x_t^{\mathrm{PPO}}
 -
-x_t^{Baseline}
+x_t^{\mathrm{Baseline}}
 \right|.
-\]
+$$
 
-![Trajectory Difference Auto Scale](assets/trajectory_difference_autoscale.png)
+![Trajectory Difference — Auto Scale](assets/trajectory_difference_autoscale.png)
 
-The difference maps immediately revealed spatial structure.
+The difference maps reveal spatial structure that is difficult to see in the raw trajectories.
 
-However, there was a visualization problem.
+However, the first visualization introduced another problem.
 
-If every subplot is automatically normalized to its own range, a very small difference at \(t=400\) can appear almost as bright as a much larger difference at \(t=100\).
+Each subplot was automatically normalized using its own value range.
 
-That makes it difficult to compare the **magnitude** of the difference across time.
+As a result, a very small difference at $t=400$ could appear visually as bright as a much larger difference at $t=100$.
+
+This can exaggerate early differences.
 
 ---
 
-# 14. Shared-Scale Difference Map
+# 16. Shared-Scale Difference Map
 
-To correct this, all heatmaps were plotted using the same global color scale.
+To compare the magnitude of the difference across timesteps, I replotted every heatmap using a **single shared color scale**.
 
-![Trajectory Difference Shared Scale](assets/trajectory_difference_shared.png)
+![Trajectory Difference — Shared Scale](assets/trajectory_difference_shared.png)
 
-This changes the interpretation considerably.
-
-At \(t=400\), the difference is spatially structured but still relatively weak.
-
-As reverse diffusion proceeds:
+The interpretation becomes much clearer.
 
 ```text
 t = 400
-small structured difference
-        │
-        ▼
-t = 350 ~ 300
+weak but spatially structured difference
+              │
+              ▼
+t = 350–300
 difference gradually strengthens
-        │
-        ▼
-t = 275 ~ 250
-structure becomes clearer
-        │
-        ▼
-t = 225 ~ 175
+              │
+              ▼
+t = 275–250
+structured difference becomes clearer
+              │
+              ▼
+t = 225–175
 difference strongly amplifies
-        │
-        ▼
-t = 150 ~ 100
+              │
+              ▼
+t = 150–100
 large stroke-shaped differences
 ```
 
 The difference does not suddenly appear at one timestep.
 
-Instead, it appears to be **progressively amplified through denoising**.
+Instead, the pixel-space difference appears to be **progressively amplified during denoising**.
 
-Importantly, the presence of a spatial difference at \(t=400\) does not mean that the semantic `5` vs `9` decision has already been made.
+Importantly, this does not mean that the semantic `5` versus `9` decision was already made at $t=400$.
 
-This visualization measures pixel-space differences, not semantic identity.
+The heatmap measures pixel-space differences, not semantic identity.
 
 ---
 
-# 15. Quantifying Trajectory Divergence
+# 17. Quantifying Trajectory Divergence
 
-Finally, I measured the pixel-space MSE between the baseline and PPO trajectories:
+To quantify the observation, I calculated the MSE between the two trajectory states:
 
-\[
+$$
 D_t
 =
 \operatorname{MSE}
 \left(
-x_t^{PPO},
-x_t^{Baseline}
+x_t^{\mathrm{PPO}},
+x_t^{\mathrm{Baseline}}
 \right).
-\]
+$$
 
-![Trajectory Divergence](assets/trajectory_mse.png)
+![Trajectory Divergence MSE](assets/trajectory_mse.png)
 
-For the analyzed sample:
+For the selected sample:
 
-| t | MSE |
+| Timestep | Baseline–PPO MSE |
 |---:|---:|
 | 400 | ~0.011 |
 | 375 | ~0.014 |
@@ -629,11 +718,11 @@ For the analyzed sample:
 | 125 | ~0.191 |
 | 100 | ~0.220 |
 
-The curve grows smoothly rather than showing one obvious discontinuity.
+The curve increases smoothly rather than exhibiting one obvious discontinuity.
 
-This suggests a process closer to:
+For this sample, the observed behavior is therefore closer to
 
-\[
+$$
 \text{small difference}
 \rightarrow
 \text{accumulation}
@@ -641,45 +730,45 @@ This suggests a process closer to:
 \text{amplification}
 \rightarrow
 \text{different final structure}.
-\]
+$$
 
 ---
 
-# 16. Why Does the Difference Grow?
+# 18. Why Can a Small Difference Grow?
 
-Suppose PPO slightly changes the model's predicted noise:
+The reverse-process mean depends on the model's predicted noise.
 
-\[
+Suppose PPO introduces a small difference:
+
+$$
 \Delta\epsilon_t
 =
-\epsilon_{\theta_{PPO}}(x_t,t)
+\epsilon_{\theta_{\mathrm{PPO}}}(x_t,t)
 -
-\epsilon_{\theta_{Base}}(x_t,t).
-\]
+\epsilon_{\theta_{\mathrm{Base}}}(x_t,t).
+$$
 
-That changes the reverse-process mean.
+This changes the reverse transition and therefore the next state:
 
-Therefore,
-
-\[
+$$
 \Delta\epsilon_t
 \rightarrow
 \Delta x_{t-1}.
-\]
+$$
 
-At the next timestep, the two models are now operating on slightly different states.
+At the following timestep, the models are now operating on slightly different states.
 
-This can create another difference in their noise predictions:
+That can create another difference in the predicted noise:
 
-\[
+$$
 \Delta x_{t-1}
 \rightarrow
 \Delta\epsilon_{t-1}.
-\]
+$$
 
-The effect can therefore propagate:
+The process can therefore propagate recursively:
 
-\[
+$$
 \boxed{
 \Delta\epsilon_t
 \rightarrow
@@ -693,137 +782,189 @@ The effect can therefore propagate:
 \rightarrow
 \Delta x_0
 }
-\]
+$$
 
-This provides one way of interpreting the smooth increase observed in the MSE curve.
+This provides one interpretation of the smooth increase observed in the trajectory MSE.
 
-A relatively small policy modification can affect a reverse step, which changes the state presented to the model at the following step, allowing the difference to accumulate through the recursive denoising process.
+A small policy modification affects one reverse step, which changes the input state at the following step, allowing the difference to accumulate throughout denoising.
 
 ---
 
-# 17. What I Learned From the Experiment
+# 19. What Did PPO Actually Change?
 
-The initial question was simple:
+The experiment started with a terminal objective:
 
-> **Can PPO be added to a DDPM?**
+$$
+R(x_0).
+$$
 
-But the experiment produced a more interesting set of observations.
+But PPO does not directly modify only the final image.
 
-### Reward
+It changes the transition policy
 
-PPO slightly increased the classifier-confidence reward:
+$$
+p_\theta(x_{t-1}\mid x_t)
+$$
 
-\[
-0.9154 \rightarrow 0.9203.
-\]
+throughout the reverse process.
 
-### Distribution
+Therefore:
 
-At the same time, the generated class distribution changed substantially.
+```text
+Final Reward
+     │
+     ▼
+ PPO Update
+     │
+     ▼
+Reverse Transition Policy Changes
+     │
+     ▼
+Trajectory Changes
+     │
+     ▼
+Future States Change
+     │
+     ▼
+Future Noise Predictions Change
+     │
+     ▼
+Final Generation Changes
+```
 
-In particular:
+This helps explain why a relatively small change in average reward can coexist with a substantial change in generative behavior.
 
-\[
-P(\text{digit}=1):
-7.3\% \rightarrow 21.1\%.
-\]
+---
 
-### Trajectory
+# 20. Main Observations
 
-Even under matched initial and reverse-process noise, the baseline and PPO models could converge to different digits.
+The experiment produced four main observations.
 
-### Divergence
+### 1. PPO slightly improved the chosen reward
 
-The difference between their trajectories did not appear as one sudden event.
+$$
+0.9154
+\rightarrow
+0.9203.
+$$
 
-Instead, pixel-space divergence increased progressively as denoising proceeded.
+### 2. The generated distribution changed substantially
 
-So:
+For digit `1`:
 
-\[
+$$
+7.3\%
+\rightarrow
+21.1\%.
+$$
+
+### 3. Baseline and PPO can follow different trajectories under matched stochastic conditions
+
+For the selected sample:
+
+```text
+Baseline → 5
+PPO      → 9
+```
+
+### 4. Pixel-space trajectory divergence increased progressively
+
+The MSE increased from approximately
+
+$$
+0.011
+\quad\text{at }t=400
+$$
+
+to
+
+$$
+0.220
+\quad\text{at }t=100.
+$$
+
+Together, these results suggest:
+
+$$
 \boxed{
 \text{small reward change}
 \not\Rightarrow
 \text{small generative behavior change}
 }
-\]
+$$
 
 and
 
-\[
+$$
 \boxed{
 \text{reward improvement}
 \neq
 \text{distribution preservation}.
 }
-\]
+$$
 
 ---
 
-# 18. Limitations
+# 21. Limitations
 
-This project is an exploratory MNIST-scale experiment, and several limitations are important.
+This is an exploratory MNIST-scale experiment rather than a general result about reinforcement learning for diffusion models.
 
 ### Simple reward
 
-The reward is only the maximum confidence of an MNIST classifier.
+The reward is only classifier confidence:
 
-\[
-R(x_0)=\max_kP(y=k|x_0).
-\]
+$$
+R(x_0)
+=
+\max_k P(y=k\mid x_0).
+$$
 
-It does not explicitly measure:
+It does not directly measure:
 
 - perceptual quality
 - diversity
 - class balance
 - similarity to the original DDPM distribution
 
-Therefore, reward optimization can create unintended distribution shifts.
+The reward can therefore encourage unintended behavior.
 
-### Reward model bias
+### Reward-model bias
 
-The strong increase in digit `1` suggests that the reward may favor some generated structures over others.
+Digit `1` became substantially more frequent after PPO.
 
-However, this experiment does not determine whether this is caused by classifier calibration, digit complexity, the DDPM itself, PPO optimization, or another factor.
-
-### Small dataset and architecture
-
-MNIST and the small U-Net make the experiment easy to inspect, but the result cannot automatically be generalized to large-scale diffusion models.
+The current experiment cannot determine whether this comes from classifier calibration, the baseline DDPM distribution, digit complexity, PPO optimization, or another factor.
 
 ### Simplified PPO
 
-The PPO implementation is intentionally lightweight.
+The implementation is intentionally lightweight and uses a simplified terminal-reward value formulation rather than a diffusion-specific RL framework.
 
-The value network estimates terminal reward from intermediate diffusion states, and the experiment does not use a full diffusion-specific RL framework.
+### MNIST-scale experiment
 
-### Pixel MSE is not semantic distance
+MNIST and the small U-Net make the trajectories easy to inspect, but the observations cannot automatically be generalized to modern large-scale diffusion models.
 
-The trajectory MSE tells us
+### Pixel-space distance is not semantic distance
 
-> how different the two states are,
+The MSE analysis measures how different two intermediate states are.
 
-but not
+It does not tell us exactly when their semantic interpretation becomes `5` versus `9`.
 
-> whether the models already represent different semantic classes.
+### Detailed analysis of one selected trajectory
 
-A large pixel difference does not necessarily imply semantic divergence, and a small difference may still matter semantically.
+The trajectory visualization provides a concrete example, but one selected `5 → 9` trajectory is not enough to establish a general pattern.
 
-### Single-trajectory interpretation
-
-The detailed `5 → 9` analysis demonstrates a concrete trajectory phenomenon, but one trajectory is not sufficient to establish a general law about PPO-fine-tuned diffusion models.
+A larger trajectory-level analysis is required.
 
 ---
 
-# 19. What I Want to Try Next
+# 22. Next Steps
 
 The next step is to move from **pixel-space trajectory analysis** toward **semantic trajectory analysis**.
 
-## 1. Predicted clean image at each timestep
+## 22.1 Predicted Clean Image at Each Timestep
 
-For each intermediate state,
+At any timestep, the model's predicted clean image can be estimated as
 
-\[
+$$
 \hat{x}_0^{(t)}
 =
 \frac{
@@ -834,84 +975,108 @@ x_t
 }{
 \sqrt{\bar{\alpha}_t}
 }.
-\]
+$$
 
-Instead of looking only at noisy \(x_t\), this allows us to inspect what clean image the model currently predicts.
+Instead of asking only
 
-The question becomes:
+> How different are the noisy states?
+
+we can ask
+
+> **What clean image does each model currently predict this trajectory will become?**
+
+Conceptually:
 
 ```text
-t       Baseline x̂0       PPO x̂0
+t        Baseline x̂₀        PPO x̂₀
 
-400          ?                ?
-350          ?                ?
-300          ?                ?
-250        5-like?          9-like?
-200          5                9
+400           ?                 ?
+350           ?                 ?
+300           ?                 ?
+250        5-like?           9-like?
+200           5                 9
+150           5                 9
 ...
-0            5                9
+0             5                 9
 ```
 
-This may help distinguish
+This could help distinguish
 
 ```text
-pixel-space divergence
+Pixel-space divergence
+"When do x_t states become different?"
 ```
 
 from
 
 ```text
-semantic divergence.
+Semantic divergence
+"When do the predicted final structures become different?"
 ```
 
-## 2. Analyze many trajectories
+---
 
-Rather than selecting one interesting sample, the same controlled experiment can be repeated across many initial noises.
+## 22.2 Analyze Many Controlled Trajectories
+
+The same experiment can be repeated across many initial noises.
 
 Possible measurements include:
 
 - trajectory MSE
-- class-change frequency
-- timestep of semantic divergence
-- final reward difference
+- final class-change frequency
+- semantic divergence timestep
+- reward difference
 - feature-space trajectory distance
+- relationship between trajectory divergence and final class change
 
-This would make it possible to determine whether progressive divergence is a general pattern or specific to individual samples.
-
-## 3. Better reward design
-
-The current reward could be extended to include terms for:
-
-\[
-R
-=
-R_{\text{confidence}}
-+
-\lambda_1R_{\text{diversity}}
-+
-\lambda_2R_{\text{distribution}}.
-\]
-
-This could test whether PPO can increase a desired reward without producing such a large class-distribution shift.
-
-## 4. Move beyond MNIST
-
-The same idea could eventually be tested on more complex diffusion architectures and datasets, where trajectory changes may involve not only class identity but also local structure, attributes, and semantic features.
+This would test whether progressive divergence is a general phenomenon or mainly a property of selected samples.
 
 ---
 
-# 20. Repository Structure
+## 22.3 Better Reward Design
+
+The current reward could be extended with additional constraints:
+
+$$
+R
+=
+R_{\mathrm{confidence}}
++
+\lambda_1R_{\mathrm{diversity}}
++
+\lambda_2R_{\mathrm{distribution}}.
+$$
+
+This could test whether PPO can improve a desired objective while preserving more of the original generative distribution.
+
+---
+
+## 22.4 Beyond MNIST
+
+The same idea could eventually be explored on more complex datasets and diffusion architectures.
+
+With richer images, trajectory changes could be analyzed not only through class identity but also through:
+
+- local structures
+- object parts
+- visual attributes
+- semantic features
+- feature-space representations
+
+---
+
+# 23. Repository Structure
 
 ```text
 DDPM-with-PPO--MNIST/
 │
 ├── DDPM.ipynb
-│
 ├── README.md
 │
 ├── assets/
 │   ├── ddpm_training_loss.png
-│   ├── ddpm_baseline_samples.png
+│   ├── ddpm_baseline_samples_1.png
+│   ├── ddpm_baseline_samples_2.png
 │   ├── ddpm_denoising_process.png
 │   ├── ppo_training.png
 │   ├── class_distribution.png
@@ -941,26 +1106,49 @@ This project started as a small exercise to understand DDPM by implementing it f
 
 Then I asked:
 
-> **What if reinforcement learning is added to the reverse diffusion process?**
+> **What happens if reinforcement learning is added to the reverse diffusion process?**
 
-PPO provided a way to experiment with that idea.
+PPO provided a simple way to explore that question.
 
-But the most interesting part was not the small increase in reward itself.
+The reward increased only slightly, while the generated class distribution changed substantially.
 
-It was discovering that the reward optimization also changed the generated distribution, and then tracing that change back through the denoising process.
+That observation motivated a deeper analysis of the denoising process itself.
 
-The controlled trajectory experiment showed:
+By fixing both the initial noise and every reverse-process noise term, I compared the baseline and PPO models under matched stochastic conditions.
 
-\[
-\boxed{
-\text{PPO update}
-\rightarrow
-\text{small trajectory perturbation}
-\rightarrow
-\text{progressive divergence}
-\rightarrow
-\text{different final generation}
-}
-\]
+For one selected trajectory, the two models eventually generated different digits:
 
-This small experiment made me interested in diffusion models not only as models that transform noise into an image, but as **dynamic generative processes whose intermediate trajectories can themselves be analyzed**.
+```text
+Baseline → 5
+PPO      → 9
+```
+
+Difference maps and trajectory MSE showed that their states did not separate at one obvious timestep. Instead, the difference progressively increased throughout later denoising.
+
+The project therefore evolved from
+
+```text
+Implement DDPM
+```
+
+to
+
+```text
+Implement DDPM
+      ↓
+Add PPO
+      ↓
+Observe reward change
+      ↓
+Discover distribution shift
+      ↓
+Control sampling randomness
+      ↓
+Analyze denoising trajectories
+      ↓
+Measure progressive divergence
+```
+
+The most interesting lesson was that the effect of reinforcement learning on a diffusion model may not be fully understood from its final reward or final generated image alone.
+
+**The denoising trajectory itself can be an object of analysis.**
