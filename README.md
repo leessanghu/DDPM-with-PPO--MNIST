@@ -53,8 +53,8 @@ $$
 
 using the standard DDPM noise-prediction objective:
 
-$$
-\mathcal{L}_{\mathrm{DDPM}} $$
+$$[
+\mathcal{L}_{\mathrm{DDPM}} \]$$
 =
 
 $$\mathbb{E}
