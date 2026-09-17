@@ -10,9 +10,9 @@ After training the baseline model, I became interested in a different question:
 
 Since diffusion generation can be viewed as a sequence of stochastic transitions
 
-\[
+$$\[
 x_T \rightarrow x_{T-1} \rightarrow \cdots \rightarrow x_0,
-\]
+$$\]
 
 I experimented with treating this denoising process as a policy trajectory and fine-tuning it using **Proximal Policy Optimization (PPO)**.
 
