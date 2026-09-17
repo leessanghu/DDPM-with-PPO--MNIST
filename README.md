@@ -231,27 +231,77 @@ The purpose was not to design an optimal perceptual reward model, but to observe
 
 ---
 
-# 4. PPO Formulation
+## 4. PPO Formulation
 
 For each reverse transition, the Gaussian transition probability is interpreted as the policy probability.
 
-The PPO probability ratio is
+The PPO probability ratio compares the probability of the same transition under the updated policy and the old policy.
 
-$$[
-r_t(\theta) ]$$
-=
+First, the log-probability under the updated policy is
 
-$$[exp
-\log p_\theta(x_{t-1}\mid x_t)] $$
--
-$$ [log p_{\theta_{\mathrm{old}}}(x_{t-1}\mid x_t)
-\right]
+$$
+\log p_\theta(x_{t-1}\mid x_t)
 $$
 
-The clipped PPO objective is
+and the log-probability under the old policy is
 
-$$[
-{L}_{\mathrm{PPO}}] $$
+$$
+\log p_{\theta_{\mathrm{old}}}(x_{t-1}\mid x_t).
+$$
+
+Their difference is
+
+$$
+\log p_\theta(x_{t-1}\mid x_t)
+-
+\log p_{\theta_{\mathrm{old}}}(x_{t-1}\mid x_t).
+$$
+
+The PPO probability ratio is then
+
+$$
+r_t(\theta)
+=
+\exp
+\left(
+\log p_\theta(x_{t-1}\mid x_t)
+-
+\log p_{\theta_{\mathrm{old}}}(x_{t-1}\mid x_t)
+\right).
+$$
+
+The unclipped policy objective is
+
+$$
+r_t(\theta)A_t.
+$$
+
+The clipped probability ratio is
+
+$$
+\operatorname{clip}
+\left(
+r_t(\theta),
+1-\epsilon,
+1+\epsilon
+\right).
+$$
+
+Therefore, the clipped objective becomes
+
+$$
+\operatorname{clip}
+\left(
+r_t(\theta),
+1-\epsilon,
+1+\epsilon
+\right)A_t.
+$$
+
+Finally, PPO takes the minimum between the unclipped and clipped objectives:
+
+$$
+\mathcal{L}_{\mathrm{PPO}}
 =
 \mathbb{E}
 \left[
@@ -268,28 +318,29 @@ r_t(\theta),
 \right].
 $$
 
-A separate value network estimates the expected terminal reward from an intermediate diffusion state:
+A separate value network estimates the expected terminal reward:
+
+$$
+V_\phi(x_t,t)
+$$
+
+with the target
 
 $$
 V_\phi(x_t,t)
 \approx
-\mathbb{E}
-\left[
-R(x_0)\mid x_t
-\right].
+\mathbb{E}[R(x_0)\mid x_t].
 $$
 
-For this experiment, a simplified advantage was used:
+The simplified advantage used in this experiment is
 
 $$
 A_t
 =
-R(x_0)-V_\phi(x_t,t).
+R(x_0)
+-
+V_\phi(x_t,t).
 $$
-
-The PPO policy was initialized from the pretrained baseline DDPM rather than trained from scratch.
-
----
 
 # 5. PPO Experiment Setup
 
