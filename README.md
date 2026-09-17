@@ -242,7 +242,6 @@ r_t(\theta) ]$$
 =
 
 $$[exp
-\left[
 \log p_\theta(x_{t-1}\mid x_t)] $$
 -
 $$ [log p_{\theta_{\mathrm{old}}}(x_{t-1}\mid x_t)
@@ -252,7 +251,7 @@ $$
 The clipped PPO objective is
 
 $$[
-mathcal{L}_{\mathrm{PPO}}] $$
+{L}_{\mathrm{PPO}}] $$
 =
 \mathbb{E}
 \left[
