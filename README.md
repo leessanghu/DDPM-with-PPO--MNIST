@@ -160,8 +160,8 @@ $$
 
 Each reverse transition follows
 
-$$
-p_\theta(x_{t-1}\mid x_t) $$
+$$[\
+p_\theta(x_{t-1}\mid x_t)\] $$
 =
 
 $$\mathcal{N}
@@ -216,8 +216,8 @@ Its test accuracy reached approximately:
 
 For a generated image $x_0$, the reward was defined as
 
-$$
-R(x_0) $$
+$$[\
+R(x_0)\] $$
 =
 
 $$ \max_k P(y=k\mid x_0).
@@ -237,22 +237,22 @@ For each reverse transition, the Gaussian transition probability is interpreted 
 
 The PPO probability ratio is
 
-$$
-r_t(\theta) $$
+$$[\
+r_t(\theta) \]$$
 =
 
-$$\exp
+$$[\exp
 \left[
-\log p_\theta(x_{t-1}\mid x_t) $$
+\log p_\theta(x_{t-1}\mid x_t)\] $$
 -
-$$ \log p_{\theta_{\mathrm{old}}}(x_{t-1}\mid x_t)
-\right].
+$$ [\log p_{\theta_{\mathrm{old}}}(x_{t-1}\mid x_t)
+\right\]
 $$
 
 The clipped PPO objective is
 
-$$
-\mathcal{L}_{\mathrm{PPO}}
+$$[
+\mathcal{L}_{\mathrm{PPO}}\]
 =
 \mathbb{E}
 \left[
