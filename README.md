@@ -54,9 +54,10 @@ $$
 using the standard DDPM noise-prediction objective:
 
 $$
-\mathcal{L}_{\mathrm{DDPM}}
+\mathcal{L}_{\mathrm{DDPM}} $$
 =
-\mathbb{E}
+
+$$\mathbb{E}
 \left[
 \left\|
 \epsilon-\epsilon_\theta(x_t,t)
@@ -90,7 +91,7 @@ Although the model was intentionally undertrained, this was sufficient to produc
 
 ## 1.2 Baseline Generation
 
-![Baseline DDPM Samples](assets/ddpm_baseline_samples_1.png)
+![Baseline DDPM Samples](assets/ddpm_baseline_samples.png)
 
 The baseline DDPM successfully generates recognizable digits from Gaussian noise.
 
@@ -160,9 +161,10 @@ $$
 Each reverse transition follows
 
 $$
-p_\theta(x_{t-1}\mid x_t)
+p_\theta(x_{t-1}\mid x_t) $$
 =
-\mathcal{N}
+
+$$\mathcal{N}
 \left(
 \mu_\theta(x_t,t),
 \sigma_t^2 I
@@ -215,9 +217,10 @@ Its test accuracy reached approximately:
 For a generated image $x_0$, the reward was defined as
 
 $$
-R(x_0)
+R(x_0) $$
 =
-\max_k P(y=k\mid x_0).
+
+$$ \max_k P(y=k\mid x_0).
 $$
 
 In other words, a generated image receives a high reward when the classifier is confident that it belongs to one of the MNIST classes.
@@ -235,13 +238,14 @@ For each reverse transition, the Gaussian transition probability is interpreted 
 The PPO probability ratio is
 
 $$
-r_t(\theta)
+r_t(\theta) $$
 =
-\exp
+
+$$\exp
 \left[
-\log p_\theta(x_{t-1}\mid x_t)
+\log p_\theta(x_{t-1}\mid x_t) $$
 -
-\log p_{\theta_{\mathrm{old}}}(x_{t-1}\mid x_t)
+$$ \log p_{\theta_{\mathrm{old}}}(x_{t-1}\mid x_t)
 \right].
 $$
 
