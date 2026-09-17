@@ -12,7 +12,7 @@ Since diffusion generation can be viewed as a sequence of stochastic transitions
 
 $$\[
 x_T \rightarrow x_{T-1} \rightarrow \cdots \rightarrow x_0,
-$$\]
+\] $$
 
 I experimented with treating this denoising process as a policy trajectory and fine-tuning it using **Proximal Policy Optimization (PPO)**.
 
@@ -33,31 +33,31 @@ The first stage was simply to implement and understand a DDPM.
 
 For the forward diffusion process,
 
-\[
+$$ \[
 x_t =
 \sqrt{\bar{\alpha}_t}x_0
 +
 \sqrt{1-\bar{\alpha}_t}\epsilon,
 \qquad
 \epsilon \sim \mathcal{N}(0,I).
-\]
+\] $$
 
 A small U-Net was trained to predict the added noise,
 
-\[
+$$\[
 \epsilon_\theta(x_t,t),
-\]
+\]$$
 
 using the standard noise-prediction objective
 
-\[
+$$\[
 \mathcal{L}_{DDPM}
 =
 \mathbb{E}
 \left[
 \|\epsilon-\epsilon_\theta(x_t,t)\|^2
 \right].
-\]
+\]$$
 
 The implementation includes:
 
@@ -130,7 +130,7 @@ This observation led to the next question:
 
 The DDPM reverse process is
 
-\[
+$$\[
 x_T
 \rightarrow
 x_{T-1}
@@ -138,11 +138,11 @@ x_{T-1}
 \cdots
 \rightarrow
 x_0.
-\]
+\]$$
 
 Each reverse transition can be written as
 
-\[
+$$\[
 p_\theta(x_{t-1}|x_t)
 =
 \mathcal{N}
@@ -150,7 +150,7 @@ p_\theta(x_{t-1}|x_t)
 \mu_\theta(x_t,t),
 \sigma_t^2I
 \right).
-\]
+\]$$
 
 This suggests the following interpretation:
 
@@ -162,11 +162,11 @@ State
 DDPM / Policy
   │
   ▼
-pθ(x_{t-1} | x_t)
+$$pθ(x_{t-1} | x_t)$$
   │
   ▼
 Next State
-x_{t-1}
+$$x_{t-1}$$
   │
   ▼
  ...
@@ -193,13 +193,13 @@ A separate CNN classifier was trained on MNIST and reached approximately
 Test Accuracy = 98.96%
 ```
 
-For a generated image \(x_0\), I defined the reward as
+For a generated image $$\(x_0\)$$, I defined the reward as
 
-\[
+$$\[
 R(x_0)
 =
 \max_k P(y=k|x_0).
-\]
+\]$$
 
 In other words, the diffusion model receives a high reward when the classifier is confident that the generated image belongs to one of the MNIST classes.
 
@@ -215,7 +215,7 @@ For each reverse transition, the Gaussian transition probability was used as the
 
 The PPO ratio is
 
-\[
+$$\[
 r_t(\theta)
 =
 \exp
@@ -224,11 +224,11 @@ r_t(\theta)
 -
 \log p_{\theta_{\text{old}}}(x_{t-1}|x_t)
 \right].
-\]
+\]$$
 
 The clipped objective is
 
-\[
+$$\[
 \mathcal{L}_{PPO}
 =
 \mathbb{E}
@@ -239,21 +239,20 @@ r_tA_t,
 \operatorname{clip}(r_t,1-\epsilon,1+\epsilon)A_t
 \right)
 \right].
-\]
+\]$$
 
 A small value network was also trained to estimate
 
-\[
+$$\[
 V_\phi(x_t,t)
 \approx
 \mathbb{E}[R(x_0)|x_t],
-\]
-
+\]$$
 with a simplified advantage
 
-\[
+$$\[
 A_t = R(x_0)-V_\phi(x_t,t).
-\]
+\]$$
 
 The PPO experiment used the pretrained DDPM as the starting policy rather than training a diffusion model from scratch with RL.
 
